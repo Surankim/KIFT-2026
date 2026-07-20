@@ -316,13 +316,31 @@ class Component extends DCLogic {
   componentDidMount() {
     const applySrc = (src) => {
       const v = this.heroVideoRef.current;
+  
       if (v) {
+
+        v.setAttribute("muted", "");
+v.setAttribute("playsinline", "");
+v.setAttribute("webkit-playsinline", "");
+  
         v.src = src;
         v.load();
         v.muted = true;
         v.defaultMuted = true;
         v.volume = 0;
-        v.play().then(() => { v.muted = true; v.volume = 0; }).catch(() => {});
+        v.play()
+  .then(() => {})
+  .catch(() => {
+    const retry = () => {
+      v.muted = true;
+      v.defaultMuted = true;
+      v.volume = 0;
+      v.play().catch(() => {});
+    };
+
+    document.addEventListener("touchstart", retry, { once: true });
+    document.addEventListener("click", retry, { once: true });
+  });
       }
       this.setState({ heroVideoSrc: src });
     };
