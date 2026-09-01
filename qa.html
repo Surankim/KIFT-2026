@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KIFT 2026 — Ask a Question</title>
+<style>
+  :root{
+    --ink:#1c1a17; --paper:#f7f4ee; --brass:#b08d57; --brass-dim:#8f7346;
+    --line:rgba(28,26,23,0.12); --shadow:0 12px 32px rgba(28,26,23,0.18);
+  }
+  *{box-sizing:border-box;}
+  html,body{ margin:0; padding:0; background:var(--paper); font-family:'Helvetica Neue',Arial,sans-serif; color:var(--ink); }
+  .stage{ position:relative; width:100%; min-height:100vh; overflow:hidden; }
+  .status-line{ position:absolute; left:24px; bottom:24px; font-size:11px; color:rgba(28,26,23,0.35); display:flex; align-items:center; gap:6px; }
+  .status-dot{ width:6px;height:6px;border-radius:50%; background:#5a9c6a; }
+  .status-dot.err{ background:#c0524a; }
+
+  .fab{
+    position:fixed; right:24px; bottom:24px; display:flex; align-items:center; gap:10px;
+    padding:14px 20px 14px 16px; background:var(--ink); color:var(--paper); border:none;
+    border-radius:999px; box-shadow:var(--shadow); cursor:pointer; font-size:14px; font-weight:600;
+    transition:transform .25s ease; z-index:50; text-align:left; line-height:1.3;
+  }
+  .fab:hover{ transform:translateY(-2px); }
+  .fab .dot{ width:8px;height:8px;border-radius:50%; background:var(--brass); flex-shrink:0; }
+  .fab .ko{ display:block; font-size:11px; font-weight:400; opacity:0.65; }
+
+  .panel{
+    position:fixed; right:24px; bottom:24px; width:min(360px, calc(100% - 48px));
+    background:var(--paper); border-radius:20px; box-shadow:var(--shadow); border:1px solid var(--line);
+    padding:22px; transform-origin:bottom right; transform:scale(0.92) translateY(8px); opacity:0; pointer-events:none;
+    transition:transform .28s cubic-bezier(.2,.8,.2,1), opacity .2s ease; z-index:50;
+  }
+  .panel.open{ transform:scale(1) translateY(0); opacity:1; pointer-events:auto; }
+  .panel-head{ display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:14px; }
+  .panel-title{ font-size:17px; font-weight:700; }
+  .panel-title .ko{ display:block; font-size:12px; font-weight:400; color:rgba(28,26,23,0.45); margin-top:2px; }
+  .panel-sub{ font-size:12px; color:rgba(28,26,23,0.5); margin-top:8px; line-height:1.5; }
+  .panel-sub .ko{ display:block; opacity:0.75; margin-top:2px; }
+  .panel-close{ background:none; border:none; font-size:18px; color:rgba(28,26,23,0.4); cursor:pointer; }
+  .field-label{ font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--brass-dim); font-weight:700; margin-bottom:6px; display:block; }
+  .field-label .ko{ text-transform:none; letter-spacing:normal; font-weight:400; opacity:0.8; }
+  textarea, input[type=text]{ width:100%; border:1px solid var(--line); border-radius:12px; background:#fff; padding:11px 13px; font-size:14px; font-family:inherit; resize:none; outline:none; }
+  textarea:focus, input[type=text]:focus{ border-color:var(--brass); }
+  textarea{ height:84px; margin-bottom:12px; }
+  input[type=text]{ margin-bottom:14px; }
+  .submit-btn{ width:100%; padding:12px; background:var(--ink); color:var(--paper); border:none; border-radius:12px; font-size:14px; font-weight:700; cursor:pointer; }
+  .submit-btn .ko{ display:block; font-size:11px; font-weight:400; opacity:0.65; margin-top:1px; }
+  .submit-btn:disabled{ opacity:0.4; cursor:default; }
+  .success-msg{ text-align:center; padding:20px 4px 6px; font-size:14px; }
+  .success-msg .big{ font-size:26px; display:block; margin-bottom:8px; }
+  .success-msg .ko{ display:block; font-size:12px; opacity:0.6; margin-top:2px; }
+  .success-msg .small{ font-size:12px; color:rgba(28,26,23,0.5); margin-top:8px; line-height:1.5; }
+  .success-msg .small .ko{ display:block; opacity:0.75; margin-top:2px; }
+
+  .mod{ position:fixed; inset:0; background:var(--ink); color:var(--paper); display:none; flex-direction:column; z-index:100; }
+  .mod.open{ display:flex; }
+  .mod-head{ padding:20px 22px 14px; border-bottom:1px solid rgba(247,244,238,0.12); display:flex; align-items:center; justify-content:space-between; }
+  .mod-title{ font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--brass); font-weight:700; }
+  .mod-title .ko{ text-transform:none; letter-spacing:normal; opacity:0.7; margin-left:4px; }
+  .mod-count{ font-size:12px; color:rgba(247,244,238,0.5); margin-top:3px; }
+  .mod-exit{ background:none; border:1px solid rgba(247,244,238,0.25); color:var(--paper); border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
+  .mod-clear{ background:none; border:1px solid rgba(192,82,74,0.5); color:#e08a83; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; margin-right:8px; }
+  .mod-clear:hover{ background:rgba(192,82,74,0.15); }
+  .mod-actions{ display:flex; align-items:center; }
+  .qcard{ position:relative; }
+  .qcard-del{
+    position:absolute; top:10px; right:10px; width:22px; height:22px; border-radius:50%;
+    background:rgba(247,244,238,0.08); border:none; color:rgba(247,244,238,0.5);
+    font-size:13px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:background .15s ease, color .15s ease;
+  }
+  .qcard-del:hover{ background:rgba(192,82,74,0.7); color:#fff; }
+  .mod-list{ flex:1; overflow-y:auto; padding:16px 18px 24px; display:flex; flex-direction:column; gap:10px; }
+  .qcard{ background:rgba(247,244,238,0.06); border:1px solid rgba(247,244,238,0.1); border-radius:14px; padding:14px 16px; cursor:pointer; }
+  .qcard.read{ opacity:0.38; }
+  .qcard-text{ font-size:15px; line-height:1.5; margin-bottom:8px; padding-right:26px; }
+  .qcard-meta{ display:flex; justify-content:space-between; font-size:11px; color:rgba(247,244,238,0.45); }
+  .qcard-tag{ font-size:10px; text-transform:uppercase; color:var(--brass); font-weight:700; }
+  .mod-empty{ text-align:center; padding:60px 20px; color:rgba(247,244,238,0.4); font-size:13px; }
+  .mod-empty .ko{ display:block; font-size:12px; opacity:0.7; margin-top:4px; }
+
+  .hero{ padding:80px 24px 0; text-align:center; }
+  .hero h1{ font-size:20px; margin-bottom:4px; }
+  .hero p{ font-size:13px; color:rgba(28,26,23,0.5); margin:0; }
+  .hero p .ko{ display:block; opacity:0.75; margin-top:2px; }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <div class="hero">
+    <h1>KIFT 2026</h1>
+    <p>Ask a question using the button below<span class="ko">우측 하단 버튼으로 질문을 남겨주세요</span></p>
+  </div>
+  <div class="status-line" id="statusLine"><span class="status-dot" id="statusDot"></span><span id="statusText">Connected</span></div>
+
+  <button class="fab" id="fab"><span class="dot"></span><span>Ask a question<span class="ko">질문하기</span></span></button>
+
+  <div class="panel" id="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">Ask a question<span class="ko">질문 남기기</span></div>
+        <div class="panel-sub">Not shown on screen — only the moderator sees it<span class="ko">화면에는 표시되지 않고, 진행자에게만 전달돼요</span></div>
+      </div>
+      <button class="panel-close" id="panelClose">✕</button>
+    </div>
+    <div id="formArea">
+      <label class="field-label">Question (Required)<span class="ko"> 질문 (필수)</span></label>
+      <textarea id="qText" placeholder="Ask the panel anything" maxlength="500"></textarea>
+      <label class="field-label">Name · Affiliation (Optional)<span class="ko"> 이름 · 소속 (선택)</span></label>
+      <input type="text" id="qName" placeholder="e.g. Jane Doe / Student" maxlength="60">
+      <button class="submit-btn" id="qSubmit" disabled>Send question<span class="ko">질문 보내기</span></button>
+    </div>
+    <div class="success-msg" id="successArea" style="display:none;">
+      <span class="big">✓</span>Question sent<span class="ko">질문이 전달되었어요</span>
+      <div class="small">The moderator may address it during the session<span class="ko">진행자가 확인 후 세션 중 다룰 수 있어요</span></div>
+    </div>
+  </div>
+
+  <div class="mod" id="mod">
+    <div class="mod-head">
+      <div><div class="mod-title">Moderator view<span class="ko">모더레이터 화면</span></div><div class="mod-count" id="modCount">0 questions</div></div>
+      <div class="mod-actions">
+        <button class="mod-clear" id="modClear">Clear all<span style="opacity:.6; margin-left:4px;">전체 삭제</span></button>
+        <button class="mod-exit" id="modExit">Close<span style="opacity:.6; margin-left:4px;">닫기</span></button>
+      </div>
+    </div>
+    <div class="mod-list" id="modList"><div class="mod-empty">No questions yet<span class="ko">아직 들어온 질문이 없어요</span></div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const API = '/api/questions'; // Same-origin relative path once deployed on Vercel
+  const fab = document.getElementById('fab');
+  const panel = document.getElementById('panel');
+  const panelClose = document.getElementById('panelClose');
+  const qText = document.getElementById('qText');
+  const qName = document.getElementById('qName');
+  const qSubmit = document.getElementById('qSubmit');
+  const formArea = document.getElementById('formArea');
+  const successArea = document.getElementById('successArea');
+  const mod = document.getElementById('mod');
+  const modList = document.getElementById('modList');
+  const modCount = document.getElementById('modCount');
+  const modExit = document.getElementById('modExit');
+  const modClear = document.getElementById('modClear');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+
+  let pressTimer = null, pollInterval = null, submitting = false;
+
+  function setStatus(ok, en, ko){
+    statusDot.classList.toggle('err', !ok);
+    statusText.innerHTML = en + (ko ? ' <span style="opacity:.6">· ' + ko + '</span>' : '');
+  }
+
+  fab.addEventListener('click', () => { if (!mod.classList.contains('open')) panel.classList.toggle('open'); });
+  panelClose.addEventListener('click', () => panel.classList.remove('open'));
+  qText.addEventListener('input', () => { qSubmit.disabled = qText.value.trim().length === 0 || submitting; });
+
+  function startPress(){ pressTimer = setTimeout(() => { panel.classList.remove('open'); openModerator(); }, 2000); }
+  function cancelPress(){ if (pressTimer) clearTimeout(pressTimer); }
+  fab.addEventListener('mousedown', startPress);
+  fab.addEventListener('touchstart', startPress);
+  fab.addEventListener('mouseup', cancelPress);
+  fab.addEventListener('mouseleave', cancelPress);
+  fab.addEventListener('touchend', cancelPress);
+
+  if (window.location.hash === '#moderator') openModerator();
+
+  function openModerator(){
+    mod.classList.add('open');
+    refreshQuestions();
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(refreshQuestions, 4000);
+  }
+  modExit.addEventListener('click', () => { mod.classList.remove('open'); if (pollInterval) clearInterval(pollInterval); });
+
+  modClear.addEventListener('click', async () => {
+    if (!confirm('Delete ALL questions? This cannot be undone.\n모든 질문을 삭제할까요? 되돌릴 수 없습니다.')) return;
+    try {
+      await fetch(API, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      });
+      refreshQuestions();
+    } catch (e) { setStatus(false, 'Clear failed', '삭제 실패'); }
+  });
+
+  qSubmit.addEventListener('click', async () => {
+    const text = qText.value.trim();
+    if (!text || submitting) return;
+    submitting = true; qSubmit.disabled = true; qSubmit.innerHTML = 'Sending...<span class="ko">전송 중</span>';
+    try {
+      const r = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, name: qName.value.trim() }),
+      });
+      if (!r.ok) throw new Error('failed');
+      setStatus(true, 'Connected', '연결됨');
+      formArea.style.display = 'none';
+      successArea.style.display = 'block';
+      setTimeout(() => {
+        panel.classList.remove('open');
+        setTimeout(() => {
+          formArea.style.display = 'block'; successArea.style.display = 'none';
+          qText.value = ''; qName.value = ''; qSubmit.disabled = true;
+          qSubmit.innerHTML = 'Send question<span class="ko">질문 보내기</span>';
+          submitting = false;
+        }, 300);
+      }, 1600);
+    } catch (err) {
+      submitting = false; qSubmit.disabled = false;
+      qSubmit.innerHTML = 'Send question<span class="ko">질문 보내기</span>';
+      setStatus(false, 'Send failed — try again', '전송 실패 · 다시 시도해주세요');
+    }
+  });
+
+  async function refreshQuestions(){
+    try {
+      const r = await fetch(API);
+      const data = await r.json();
+      const items = data.questions || [];
+      setStatus(true, 'Connected', '연결됨 · 방금 갱신');
+      if (items.length === 0) {
+        modList.innerHTML = '<div class="mod-empty">No questions yet<span class="ko">아직 들어온 질문이 없어요</span></div>';
+        modCount.textContent = '0 questions';
+        return;
+      }
+      const unread = items.filter(i => !i.read).length;
+      modCount.innerHTML = items.length + ' questions <span style="opacity:.6">(' + items.length + '개)</span> · ' + unread + ' unread <span style="opacity:.6">(안 읽음 ' + unread + '개)</span>';
+      modList.innerHTML = '';
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'qcard' + (item.read ? ' read' : '');
+        const timeStr = new Date(item.time).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+        const nameLabel = item.name ? escapeHtml(item.name) : 'Anonymous <span style="opacity:.6">(익명)</span>';
+        const tagLabel = item.read ? 'Read <span style="opacity:.6">읽음</span>' : 'NEW';
+        card.innerHTML =
+          '<button class="qcard-del" title="Delete">✕</button>' +
+          '<div class="qcard-text">' + escapeHtml(item.text) + '</div>' +
+          '<div class="qcard-meta"><span>' + nameLabel + ' · ' + timeStr + '</span>' +
+          '<span class="qcard-tag">' + tagLabel + '</span></div>';
+        card.addEventListener('click', async () => {
+          card.classList.toggle('read');
+          try {
+            await fetch(API, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: item.id, read: !item.read }),
+            });
+            refreshQuestions();
+          } catch(e){ setStatus(false, 'Update failed', '갱신 실패'); }
+        });
+        const delBtn = card.querySelector('.qcard-del');
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            await fetch(API, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: item.id }),
+            });
+            refreshQuestions();
+          } catch (err) { setStatus(false, 'Delete failed', '삭제 실패'); }
+        });
+        modList.appendChild(card);
+      });
+    } catch (err) {
+      setStatus(false, 'Connection failed — retrying', '연결 실패 · 재시도 중');
+    }
+  }
+
+  function escapeHtml(str){ const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+})();
+</script>
+</body>
+</html>
